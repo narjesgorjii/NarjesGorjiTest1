@@ -1,0 +1,1 @@
+print("man khabam miaaaaadddddddd")
