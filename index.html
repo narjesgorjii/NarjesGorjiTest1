@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List پیشرفته</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>To-Do List</h1>
+        </div>
+
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="جستجو در وظایف و دسته‌بندی‌ها...">
+                <button id="clearSearchBtn">پاک کردن جستجو</button>
+            </div>
+        </div>
+
+        <div class="filters-section">
+            <div class="filter-group">
+                <label>اولویت:</label>
+                <div class="priority-filters">
+                    <div class="priority-tag priority-high active" data-priority="all">همه</div>
+                    <div class="priority-tag priority-high" data-priority="high">مهم</div>
+                    <div class="priority-tag priority-medium" data-priority="medium">متوسط</div>
+                    <div class="priority-tag priority-low" data-priority="low">کم</div>
+                </div>
+            </div>
+            
+            <div class="filter-group">
+                <label>دسته‌بندی:</label>
+                <div class="category-filters" id="categoriesFilter">
+                    
+                </div>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="input-row">
+                <input type="text" id="taskInput" placeholder="وظیفه جدید را وارد کنید...">
+                <select id="prioritySelect">
+                    <option value="low">اولویت کم</option>
+                    <option value="medium" selected>اولویت متوسط</option>
+                    <option value="high">اولویت مهم</option>
+                </select>
+                <select id="categorySelect">
+                    <option value="">انتخاب دسته‌بندی</option>
+                </select>
+                <button id="addTaskBtn">افزودن</button>
+            </div>
+            
+            <div class="category-management">
+                <input type="text" id="newCategoryInput" placeholder="دسته‌بندی جدید...">
+                <button id="addCategoryBtn">افزودن دسته‌بندی</button>
+            </div>
+        </div>
+
+        <div class="tasks-section" id="tasksContainer">
+            <div class="empty-state">
+                <h3>هیچ وظیفه‌ای وجود ندارد</h3>
+                <p>یک وظیفه جدید اضافه کنید</p>
+            </div>
+        </div>
+
+        <div class="actions-section">
+            <button id="clearAllBtn">پاک کردن همه</button>
+            <button id="markDoneBtn">علامت‌گذاری انجام‌شده</button>
+            <button id="deleteTaskBtn">حذف وظیفه</button>
+        </div>
+    </div>
+
+    <script>
+        const taskInput = document.getElementById('taskInput');
+        const prioritySelect = document.getElementById('prioritySelect');
+        const categorySelect = document.getElementById('categorySelect');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const newCategoryInput = document.getElementById('newCategoryInput');
+        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        const tasksContainer = document.getElementById('tasksContainer');
+        const categoriesFilter = document.getElementById('categoriesFilter');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const markDoneBtn = document.getElementById('markDoneBtn');
+        const deleteTaskBtn = document.getElementById('deleteTaskBtn');
+        const searchInput = document.getElementById('searchInput');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+        // array for task and categories
+        let tasks = [];
+        let categories = ['کار', 'شخصی', 'تحصیلی', 'خرید'];
+        let selectedTaskId = null;
+        let selectedCategory = 'all';
+        let selectedPriority = 'all';
+        let searchQuery = '';
+        let editingTaskId = null;
+
+        // function for date and time
+        function getCurrentTimestamp() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+
+        // add Category
+        function addCategory() {
+            const categoryName = newCategoryInput.value.trim();
+
+            if (categoryName === '') {
+                alert('لطفاً نام دسته‌بندی را وارد کنید');
+                return;
+            }
+
+            if (categories.includes(categoryName)) {
+                alert('این دسته‌بندی قبلاً وجود دارد');
+                return;
+            }
+
+            categories.push(categoryName);
+
+            newCategoryInput.value = '';
+
+            renderCategories();
+        }
+
+        // delete Category
+        function deleteCategory(categoryName) {
+            if (categoryName === 'all') return;
+            
+            const tasksWithCategory = tasks.filter(task => task.category === categoryName);
+            
+            if (tasksWithCategory.length > 0) {
+                if (!confirm(`آیا از حذف دسته‌بندی "${categoryName}" مطمئن هستید؟ ${tasksWithCategory.length} وظیفه با این دسته‌بندی وجود دارد.`)) {
+                    return;
+                }
+                
+                
+                tasks = tasks.map(task => {
+                    if (task.category === categoryName) {
+                        return { ...task, category: '' };
+                    }
+                    return task;
+                });
+            }
+
+           
+            categories = categories.filter(cat => cat !== categoryName);
+            
+            renderCategories();
+            renderTasks();
+        }
+
+        // show categories
+        function renderCategories() {
+           
+            categoriesFilter.innerHTML = '';
+            categorySelect.innerHTML = '<option value="">انتخاب دسته‌بندی</option>';
+
+            // all
+            const allCategory = document.createElement('div');
+            allCategory.className = `category-tag ${selectedCategory === 'all' ? 'active' : ''}`;
+            allCategory.textContent = 'همه';
+            allCategory.setAttribute('data-category', 'all');
+            allCategory.addEventListener('click', (e) => {
+                selectedCategory = 'all';
+                renderCategories();
+                renderTasks();
+            });
+            categoriesFilter.appendChild(allCategory);
+
+         
+            categories.forEach(category => {
+       
+                const categoryTag = document.createElement('div');
+                categoryTag.className = `category-tag ${selectedCategory === category ? 'active' : ''}`;
+                categoryTag.textContent = category;
+                categoryTag.setAttribute('data-category', category);
+                categoryTag.addEventListener('click', (e) => {
+                    selectedCategory = category;
+                    renderCategories();
+                    renderTasks();
+                });
+                
+                if (!['کار', 'شخصی', 'تحصیلی', 'خرید'].includes(category)) {
+                    const deleteBtn = document.createElement('span');
+                    deleteBtn.textContent = ' ×';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.style.color = 'red';
+                    deleteBtn.style.marginRight = '5px';
+                    deleteBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteCategory(category);
+                    });
+                    categoryTag.appendChild(deleteBtn);
+                }
+                
+                categoriesFilter.appendChild(categoryTag);
+
+                
+                const categoryOption = document.createElement('option');
+                categoryOption.value = category;
+                categoryOption.textContent = category;
+                categorySelect.appendChild(categoryOption);
+            });
+        }
+
+        // add Task
+        function addTask() {
+            const taskText = taskInput.value.trim();
+            const taskPriority = prioritySelect.value;
+            const taskCategory = categorySelect.value;
+
+            if (taskText === '') {
+                alert('لطفاً متن وظیفه را وارد کنید');
+                return;
+            }
+
+            
+            const newTask = {
+                id: Date.now(),
+                text: taskText,
+                priority: taskPriority,
+                category: taskCategory,
+                done: false,
+                timestamp: getCurrentTimestamp()
+            };
+
+            // add task to array
+            tasks.push(newTask);
+
+            
+            taskInput.value = '';
+            categorySelect.value = '';
+
+    
+            renderTasks();
+        }
+
+        // delete Task
+        function deleteTask(taskId) {
+            tasks = tasks.filter(task => task.id !== taskId);
+            if (selectedTaskId === taskId) {
+                selectedTaskId = null;
+            }
+            if (editingTaskId === taskId) {
+                editingTaskId = null;
+            }
+            renderTasks();
+        }
+
+        // edit Task
+        function editTask(taskId, newText) {
+            if (newText.trim() === '') {
+                alert('متن وظیفه نمی‌تواند خالی باشد');
+                return false;
+            }
+
+            tasks = tasks.map(task => {
+                if (task.id === taskId) {
+                    return { ...task, text: newText.trim() };
+                }
+                return task;
+            });
+            
+            editingTaskId = null;
+            renderTasks();
+            return true;
+        }
+
+        
+        function startEditing(taskId) {
+            editingTaskId = taskId;
+            renderTasks();
+        }
+
+        
+        function cancelEditing() {
+            editingTaskId = null;
+            renderTasks();
+        }
+
+       //done
+        function markTaskDone(taskId) {
+            tasks = tasks.map(task => {
+                if (task.id === taskId) {
+                    return { ...task, done: !task.done };
+                }
+                return task;
+            });
+            renderTasks();
+        }
+
+        // clear All Tasks
+        function clearAllTasks() {
+            if (tasks.length === 0) {
+                alert('هیچ وظیفه‌ای برای پاک کردن وجود ندارد');
+                return;
+            }
+
+            if (confirm('آیا از پاک کردن تمام وظایف مطمئن هستید؟')) {
+                tasks = [];
+                selectedTaskId = null;
+                editingTaskId = null;
+                renderTasks();
+            }
+        }
+
+        //mark All Tasks Done
+        function markAllTasksDone() {
+            if (tasks.length === 0) {
+                alert('هیچ وظیفه‌ای برای علامت‌گذاری وجود ندارد');
+                return;
+            }
+
+            tasks = tasks.map(task => ({ ...task, done: true }));
+            renderTasks();
+        }
+
+        //delete Selected Task
+        function deleteSelectedTask() {
+            if (tasks.length === 0) {
+                alert('هیچ وظیفه‌ای برای حذف وجود ندارد');
+                return;
+            }
+
+            if (!selectedTaskId) {
+                alert('لطفاً ابتدا یک وظیفه را انتخاب کنید');
+                return;
+            }
+
+            const selectedTask = tasks.find(task => task.id === selectedTaskId);
+
+            if (confirm(`آیا از حذف وظیفه "${selectedTask.text}" مطمئن هستید؟`)) {
+                deleteTask(selectedTaskId);
+            }
+        }
+
+        // select Task
+        function selectTask(taskId) {
+            selectedTaskId = taskId;
+            renderTasks();
+        }
+
+        // filter Tasks
+        function filterTasks() {
+            let filteredTasks = tasks;
+
+            // filter for search
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                filteredTasks = filteredTasks.filter(task => 
+                    task.text.toLowerCase().includes(query) || 
+                    (task.category && task.category.toLowerCase().includes(query))
+                );
+            }
+
+            // pariorty filter
+            if (selectedPriority !== 'all') {
+                filteredTasks = filteredTasks.filter(task => task.priority === selectedPriority);
+            }
+
+            // categories filter
+            if (selectedCategory !== 'all') {
+                filteredTasks = filteredTasks.filter(task => task.category === selectedCategory);
+            }
+
+            return filteredTasks;
+        }
+
+        // show task
+        function renderTasks() {
+           
+            tasksContainer.innerHTML = '';
+
+           
+            const filteredTasks = filterTasks();
+
+            if (filteredTasks.length === 0) {
+                tasksContainer.innerHTML = `
+                    <div class="empty-state">
+                        <h3>هیچ وظیفه‌ای یافت نشد</h3>
+                        <p>${searchQuery || selectedPriority !== 'all' || selectedCategory !== 'all' ? 
+                            'فیلترهای جستجو را تغییر دهید' : 'یک وظیفه جدید اضافه کنید'}</p>
+                    </div>
+                `;
+                return;
+            }
+
+            
+            filteredTasks.forEach(task => {
+                const taskElement = document.createElement('div');
+                taskElement.className = `task-item priority-${task.priority} ${task.done ? 'done' : ''} ${task.id === selectedTaskId ? 'selected' : ''} ${task.id === editingTaskId ? 'editing' : ''}`;
+                taskElement.setAttribute('data-task-id', task.id);
+
+                const priorityText = {
+                    'high': 'مهم',
+                    'medium': 'متوسط', 
+                    'low': 'کم'
+                }[task.priority];
+
+                if (task.id === editingTaskId) {
+                    
+                    taskElement.innerHTML = `
+                        <input type="checkbox" class="task-checkbox" ${task.done ? 'checked' : ''} disabled>
+                        <div class="task-content">
+                            <input type="text" class="task-edit-input" value="${task.text}" id="edit-input-${task.id}">
+                            <div class="task-meta">
+                                <span class="task-timestamp">[${task.timestamp}]</span>
+                                <span class="task-priority ${task.priority}">${priorityText}</span>
+                                ${task.category ? `<span class="task-category">${task.category}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="task-actions">
+                            <button class="save-btn" onclick="saveEdit(${task.id})">save</button>
+                            <button class="cancel-btn" onclick="cancelEditing()">❌</button>
+                        </div>
+                    `;
+
+                   
+                    setTimeout(() => {
+                        const editInput = document.getElementById(`edit-input-${task.id}`);
+                        if (editInput) {
+                            editInput.focus();
+                            editInput.select();
+                            
+                           
+                            editInput.addEventListener('keypress', (e) => {
+                                if (e.key === 'Enter') {
+                                    saveEdit(task.id);
+                                }
+                            });
+                            
+                           
+                            editInput.addEventListener('keydown', (e) => {
+                                if (e.key === 'Escape') {
+                                    cancelEditing();
+                                }
+                            });
+                        }
+                    }, 10);
+                } else {
+                   
+                    taskElement.innerHTML = `
+                        <input type="checkbox" class="task-checkbox" ${task.done ? 'checked' : ''}>
+                        <div class="task-content">
+                            <div class="task-text">${task.text}</div>
+                            <div class="task-meta">
+                                <span class="task-timestamp">[${task.timestamp}]</span>
+                                <span class="task-priority ${task.priority}">${priorityText}</span>
+                                ${task.category ? `<span class="task-category">${task.category}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="task-actions">
+                            <button class="edit-btn" onclick="startEditing(${task.id})">✏️</button>
+                            <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
+                        </div>
+                    `;
+
+                   
+                    const checkbox = taskElement.querySelector('.task-checkbox');
+                    checkbox.addEventListener('change', () => markTaskDone(task.id));
+
+                   
+                    taskElement.addEventListener('dblclick', (e) => {
+                        if (e.target !== checkbox && !e.target.classList.contains('delete-btn') && !e.target.classList.contains('edit-btn')) {
+                            startEditing(task.id);
+                        }
+                    });
+
+                   
+                    taskElement.addEventListener('click', (e) => {
+                        if (e.target !== checkbox && !e.target.classList.contains('delete-btn') && !e.target.classList.contains('edit-btn')) {
+                            selectTask(task.id);
+                        }
+                    });
+                }
+
+                tasksContainer.appendChild(taskElement);
+            });
+        }
+
+       
+        function saveEdit(taskId) {
+            const editInput = document.getElementById(`edit-input-${taskId}`);
+            if (editInput) {
+                const newText = editInput.value;
+                editTask(taskId, newText);
+            }
+        }
+
+        
+        function updatePriorityFilter() {
+            document.querySelectorAll('.priority-tag').forEach(tag => {
+                tag.classList.remove('active');
+            });
+            document.querySelector(`.priority-tag[data-priority="${selectedPriority}"]`).classList.add('active');
+        }
+
+       
+        addTaskBtn.addEventListener('click', addTask);
+        addCategoryBtn.addEventListener('click', addCategory);
+
+        taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addTask();
+            }
+        });
+
+        newCategoryInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addCategory();
+            }
+        });
+
+        clearAllBtn.addEventListener('click', clearAllTasks);
+        markDoneBtn.addEventListener('click', markAllTasksDone);
+        deleteTaskBtn.addEventListener('click', deleteSelectedTask);
+
+       
+        document.querySelectorAll('.priority-tag').forEach(tag => {
+            tag.addEventListener('click', (e) => {
+                selectedPriority = e.target.getAttribute('data-priority');
+                updatePriorityFilter();
+                renderTasks();
+            });
+        });
+
+       
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            renderTasks();
+        });
+
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            searchQuery = '';
+            renderTasks();
+        });
+
+       
+        renderCategories();
+        renderTasks();
+    </script>
+</body>
+</html>
