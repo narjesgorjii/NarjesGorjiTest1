@@ -1,1 +1,0 @@
-print("man khabam miaaaaadddddddd")
